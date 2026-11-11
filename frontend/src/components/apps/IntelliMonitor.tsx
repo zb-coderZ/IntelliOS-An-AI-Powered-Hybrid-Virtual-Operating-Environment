@@ -111,46 +111,75 @@ export const IntelliMonitor: React.FC = () => {
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [winConnected, setWinConnected] = useState(true);
 
-  // Poll Windows telemetry every 2 seconds
+  // Real-time WebSocket connection to /ws/monitor with HTTP polling fallback
   useEffect(() => {
     let mounted = true;
-    const fetchWin = async () => {
-      try {
-        const res = await fetch(`${API}/monitor/windows`);
-        if (!res.ok) throw new Error("Fetch failed");
-        const data: WindowsMonitorData = await res.json();
-        if (mounted) {
-          setWinData(data);
-          setWinConnected(true);
+    let ws: WebSocket | null = null;
+    let pollInterval: number | null = null;
 
-          const timeLabel = new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-          });
+    const handleData = (data: WindowsMonitorData) => {
+      if (!mounted) return;
+      setWinData(data);
+      setWinConnected(true);
 
-          setHistory((prev) => {
-            const next = [
-              ...prev,
-              { time: timeLabel, cpu: data.cpu_percent, ram: data.ram_percent },
-            ];
-            // Keep last 25 points (approx 50 seconds history)
-            return next.slice(-25);
-          });
-        }
-      } catch {
-        if (mounted) {
-          setWinData(null);
-          setWinConnected(false);
-        }
-      }
+      const timeLabel = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+
+      setHistory((prev) => {
+        const next = [
+          ...prev,
+          { time: timeLabel, cpu: data.cpu_percent, ram: data.ram_percent },
+        ];
+        return next.slice(-25);
+      });
     };
 
-    fetchWin();
-    const interval = setInterval(fetchWin, 2000);
+    const startPollingFallback = () => {
+      if (pollInterval) return;
+      const fetchWin = async () => {
+        try {
+          const res = await fetch(`${API}/monitor/windows`);
+          if (!res.ok) throw new Error("Fetch failed");
+          const data: WindowsMonitorData = await res.json();
+          handleData(data);
+        } catch {
+          if (mounted) {
+            setWinData(null);
+            setWinConnected(false);
+          }
+        }
+      };
+      fetchWin();
+      pollInterval = window.setInterval(fetchWin, 2000);
+    };
+
+    try {
+      ws = new WebSocket("ws://localhost:8000/ws/monitor");
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleData(data);
+        } catch {
+          // parse error
+        }
+      };
+      ws.onerror = () => {
+        startPollingFallback();
+      };
+      ws.onclose = () => {
+        startPollingFallback();
+      };
+    } catch {
+      startPollingFallback();
+    }
+
     return () => {
       mounted = false;
-      clearInterval(interval);
+      if (ws) ws.close();
+      if (pollInterval) clearInterval(pollInterval);
     };
   }, []);
 

@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { useWallpaper } from "../../context/WallpaperContext";
+import { useUser } from "../../context/UserContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { WALLPAPER_OPTIONS } from "../../types/wallpaper";
 import type { ThemeId } from "../../types/desktop";
 
@@ -19,6 +21,20 @@ export const IntelliSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"appearance" | "system" | "users">("appearance");
   const { theme, setTheme, reduceMotion, setReduceMotion } = useTheme();
   const { wallpaper, setWallpaper, enableParallax, setEnableParallax } = useWallpaper();
+  const { activeUser, allUsers, switchUser, loading: userLoading } = useUser();
+  const { addNotification } = useNotifications();
+
+  const handleSwitchUser = async (username: string) => {
+    const success = await switchUser(username);
+    if (success) {
+      addNotification({
+        title: "User Switched",
+        message: `Active session changed to ${username.toUpperCase()}.`,
+        type: "success",
+        autoDismissMs: 3500,
+      });
+    }
+  };
 
   const themes: Array<{ id: ThemeId; name: string; color: string; desc: string }> = [
     {
@@ -252,37 +268,87 @@ export const IntelliSettings: React.FC = () => {
 
         {activeTab === "users" && (
           <div className="settings-section">
-            <h3 className="section-title">User Accounts & Permissions</h3>
+            <h3 className="section-title">User Accounts & Permissions (RBAC)</h3>
             <p className="section-subtitle">
-              Role-based access control for file operations and process execution.
+              Role-based access control for file operations, process termination, and lab execution.
             </p>
 
             <div className="user-profile-card">
-              <div className="user-avatar">
-                <span>ST</span>
+              <div
+                className="user-avatar"
+                style={{
+                  background:
+                    activeUser.role === "admin"
+                      ? "linear-gradient(135deg, #ef4444, #f97316)"
+                      : activeUser.role === "restricted"
+                      ? "linear-gradient(135deg, #64748b, #475569)"
+                      : "linear-gradient(135deg, #e95420, #a855f7)",
+                }}
+              >
+                <span>{activeUser.username.slice(0, 2).toUpperCase()}</span>
               </div>
               <div className="user-details">
-                <h4>student</h4>
-                <span className="user-role-badge">Standard User</span>
-                <p>Standard permissions: virtual file creation, lab simulation execution, allowlisted terminal commands.</p>
+                <h4>{activeUser.display_name} ({activeUser.username})</h4>
+                <span className={`user-role-badge role-${activeUser.role}`}>
+                  {activeUser.role === "admin"
+                    ? "Administrator (Root)"
+                    : activeUser.role === "restricted"
+                    ? "Restricted (Guest)"
+                    : "Standard User (Student)"}
+                </span>
+                <p>
+                  {activeUser.role === "admin"
+                    ? "Unrestricted administrative access to all virtual inodes, system processes, and hardware telemetry."
+                    : activeUser.role === "restricted"
+                    ? "Read-only access. Writing files, creating folders, or deleting virtual nodes will be rejected (403 Forbidden)."
+                    : "Standard student workspace permissions: create/edit notes, run CPU/memory simulations, allowlisted Ubuntu terminal."}
+                </p>
               </div>
             </div>
 
             <div className="settings-divider" />
 
+            <h4 style={{ fontSize: 13, marginBottom: 8, color: "var(--text-primary)" }}>
+              Switch Active User Session
+            </h4>
+
             <div className="roles-info-list">
-              <div className="role-item">
-                <span className="role-name">root (Administrator)</span>
-                <span className="role-perms">Full read/write/execute permissions on all virtual files and system processes.</span>
-              </div>
-              <div className="role-item active">
-                <span className="role-name">student (Current)</span>
-                <span className="role-perms">Standard student workspace permissions with safe sandboxed execution.</span>
-              </div>
-              <div className="role-item">
-                <span className="role-name">guest (Restricted)</span>
-                <span className="role-perms">Read-only browsing and simulation inspection.</span>
-              </div>
+              {allUsers.map((u) => {
+                const isCurrent = activeUser.username === u.username;
+                return (
+                  <div
+                    key={u.username}
+                    className={`role-item ${isCurrent ? "active" : ""}`}
+                    onClick={() => handleSwitchUser(u.username)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                      <div>
+                        <span className="role-name">
+                          {u.username} ({u.display_name})
+                        </span>
+                        <span className="role-perms">
+                          {u.role === "admin"
+                            ? "Full read/write/execute permissions on all virtual files and system processes."
+                            : u.role === "restricted"
+                            ? "Read-only observer role (demonstrates 403 Forbidden in viva)."
+                            : "Standard student workspace permissions with safe sandboxed execution."}
+                        </span>
+                      </div>
+                      <button
+                        className={`switch-user-btn ${isCurrent ? "current" : "primary"}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSwitchUser(u.username);
+                        }}
+                        disabled={isCurrent || userLoading}
+                      >
+                        {isCurrent ? "Active" : "Switch User"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

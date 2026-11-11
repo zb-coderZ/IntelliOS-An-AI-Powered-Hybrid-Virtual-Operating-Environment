@@ -153,3 +153,4 @@ def seed_default_processes(conn):
 
 # Initialize tables immediately upon import
 init_db()
+

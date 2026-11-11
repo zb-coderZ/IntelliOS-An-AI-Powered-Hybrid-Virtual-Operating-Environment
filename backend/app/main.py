@@ -236,6 +236,25 @@ def reset_virtual_processes():
     return {"source": "simulated", "processes": procs}
 
 # ==============================================================================
+# USER MANAGEMENT & RBAC ENDPOINTS
+# ==============================================================================
+
+@app.get("/api/users")
+def get_users():
+    return {
+        "users": virtual_fs.list_users(),
+        "active_user": virtual_fs.get_active_user(),
+    }
+
+@app.post("/api/users/switch")
+def switch_user(req: SwitchUserReq):
+    try:
+        active = virtual_fs.set_active_user(req.username)
+        return {"success": True, "active_user": active}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+# ==============================================================================
 # VIRTUAL & REAL FILESYSTEM ENDPOINTS
 # ==============================================================================
 
@@ -246,7 +265,8 @@ def fs_list(parent_id: str = "home"):
     if not node:
         parent_id = "root"
     items = virtual_fs.list_dir(parent_id)
-    return {"source": "simulated", "parent_id": parent_id, "items": items}
+    active_user = virtual_fs.get_active_user()
+    return {"source": "simulated", "parent_id": parent_id, "items": items, "active_user": active_user}
 
 @app.post("/api/fs/create")
 def fs_create(req: FSCreateReq):
@@ -259,7 +279,9 @@ def fs_create(req: FSCreateReq):
             owner=req.owner,
             permissions=req.permissions,
         )
-        return {"source": "simulated", "node": node.to_dict()}
+        return {"source": "simulated", "node": node}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -267,7 +289,9 @@ def fs_create(req: FSCreateReq):
 def fs_rename(req: FSRenameReq):
     try:
         node = virtual_fs.rename(req.id, req.new_name)
-        return {"source": "simulated", "node": node.to_dict()}
+        return {"source": "simulated", "node": node}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -276,6 +300,8 @@ def fs_delete(req: FSDeleteReq):
     try:
         virtual_fs.delete(req.id)
         return {"source": "simulated", "success": True}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -291,7 +317,9 @@ def fs_read(id: str):
 def fs_write(req: FSWriteReq):
     try:
         node = virtual_fs.write_file(req.id, req.content)
-        return {"source": "simulated", "node": node.to_dict()}
+        return {"source": "simulated", "node": node}
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -348,115 +376,50 @@ def ubuntu_files(req: UbuntuFilesReq):
         return {"source": "real-ubuntu", "path": req_path, "items": [], "error": str(e)}
 
 # ==============================================================================
-# AI ASSISTANT ENDPOINT (OFFLINE OS KNOWLEDGE ENGINE + VIVA TUTOR)
+# WEBSOCKET REAL-TIME HOST MONITORING STREAM
 # ==============================================================================
 
-def generate_ai_response(prompt: str, context: Optional[dict] = None) -> str:
-    p_lower = prompt.lower()
+@app.websocket("/ws/monitor")
+async def ws_monitor(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            cpu_pct = psutil.cpu_percent(interval=None)
+            ram = psutil.virtual_memory()
+            disk = psutil.disk_usage("/")
+            procs = []
+            for p in psutil.process_iter(["pid", "name", "memory_percent", "cpu_percent"]):
+                try:
+                    info = p.info
+                    if info["memory_percent"] and info["memory_percent"] > 0.05:
+                        procs.append({
+                            "pid": info["pid"],
+                            "name": info["name"],
+                            "memory_percent": info["memory_percent"],
+                            "cpu_percent": info.get("cpu_percent", 0.0),
+                        })
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            procs.sort(key=lambda x: x["memory_percent"], reverse=True)
+            payload = {
+                "source": "real-windows",
+                "cpu_percent": cpu_pct,
+                "cores": psutil.cpu_count(logical=True),
+                "ram_percent": ram.percent,
+                "ram_used_gb": round(ram.used / (1024**3), 2),
+                "ram_total_gb": round(ram.total / (1024**3), 2),
+                "disk_percent": disk.percent,
+                "disk_free_gb": round(disk.free / (1024**3), 2),
+                "processes": procs[:15],
+            }
+            await websocket.send_json(payload)
+            await asyncio.sleep(1.0)
+    except (WebSocketDisconnect, Exception):
+        pass
 
-    if context:
-        # Context-aware explanation mode
-        kind = context.get("kind")
-        if kind == "scheduling":
-            algo = context.get("algo", "Unknown")
-            avg_wt = context.get("avg_waiting", 0)
-            avg_tat = context.get("avg_turnaround", 0)
-            cpu_util = context.get("cpu_utilization", 100)
-            return (
-                f"### Analysis of CPU Scheduling ({algo.upper()})\n\n"
-                f"- **Average Waiting Time**: `{avg_wt:.2f} ms`\n"
-                f"- **Average Turnaround Time**: `{avg_tat:.2f} ms`\n"
-                f"- **CPU Utilization**: `{cpu_util:.1f}%`\n\n"
-                f"**Key Takeaways for Your Viva:**\n"
-                f"1. **Performance**: In {algo.upper()}, processes were dispatched sequentially according to arrival and burst characteristics.\n"
-                f"2. **Trade-offs**: "
-                f"{'FCFS is vulnerable to the Convoy Effect where long processes starve short ones.' if algo == 'fcfs' else ''}"
-                f"{'SJF produces mathematically minimal average waiting times but requires prior knowledge of burst times.' if algo == 'sjf' else ''}"
-                f"{'Round Robin provides fair responsiveness and prevents starvation, but its efficiency depends on time quantum selection.' if algo == 'rr' else ''}"
-                f"{'SRTF is the preemptive variant of SJF, reducing response latency for newly arrived short bursts.' if algo == 'srtf' else ''}"
-                f"{'Priority scheduling may cause starvation for low-priority tasks unless aging techniques are applied.' if 'priority' in algo else ''}"
-            )
-        elif kind == "deadlock":
-            safe = context.get("safe", False)
-            seq = context.get("safe_sequence", [])
-            if safe:
-                return (
-                    f"### Deadlock Evaluation: System in Safe State\n\n"
-                    f"- **Safe Sequence Found**: `{' -> '.join(seq)}`\n\n"
-                    f"**Explanation:**\n"
-                    f"The Banker's Algorithm verified that the available system resource vector satisfies the Need matrix for process `{seq[0]}`. "
-                    f"Upon completion, its allocated resources were reclaimed by the OS, allowing all remaining processes to finish sequentially without circular wait."
-                )
-            else:
-                return (
-                    f"### Deadlock Evaluation: System Unsafe / Deadlocked!\n\n"
-                    f"**Warning**: No safe execution sequence exists. The remaining available vector cannot fulfill the remaining maximum demands of any process. "
-                    f"At least one of the 4 Coffman conditions is violated, resulting in potential deadlock."
-                )
-        elif kind == "memory":
-            return (
-                f"### Contiguous Memory Allocation Analysis\n\n"
-                f"- **First Fit**: Scans linearly and allocates the first hole large enough. Fast ($O(N)$), but causes fragmentation near the start of memory.\n"
-                f"- **Best Fit**: Allocates the smallest hole that fits the process. Minimizes wasted block space but creates tiny, unusable fragments.\n"
-                f"- **Worst Fit**: Allocates the largest available hole. Leaves larger remaining fragments, but destroys large contiguous blocks quickly."
-            )
-
-    # General OS conceptual queries
-    if any(k in p_lower for k in ("deadlock", "coffman")):
-        return (
-            "### Deadlock and the 4 Coffman Conditions\n\n"
-            "A deadlock occurs when a set of concurrent processes are permanently blocked because each holds a resource and waits for another.\n\n"
-            "**The 4 Necessary & Sufficient Conditions:**\n"
-            "1. **Mutual Exclusion**: At least one resource is held in a non-shareable mode.\n"
-            "2. **Hold and Wait**: A process holds at least one resource while requesting additional resources.\n"
-            "3. **No Preemption**: Resources cannot be forcibly revoked from a process; they must be released voluntarily.\n"
-            "4. **Circular Wait**: A closed chain of processes exists where $P_0$ waits for $P_1$, and $P_n$ waits for $P_0$.\n\n"
-            "To prevent deadlock, the OS design must invalidate at least one of these conditions."
-        )
-    elif any(k in p_lower for k in ("round robin", "quantum")):
-        return (
-            "### Round Robin (RR) Scheduling & Time Quantum Selection\n\n"
-            "- **Mechanism**: Each ready process is assigned a fixed time slice (quantum $q$). Preemption occurs via timer interrupt.\n"
-            "- **Small Quantum ($q \\to 0$)**: High context-switch overhead degrades CPU throughput, behaving like processor sharing.\n"
-            "- **Large Quantum ($q \\to \\infty$)**: Degenerates into standard First-Come, First-Served (FCFS).\n"
-            "- **Rule of Thumb**: $80\\%$ of CPU bursts should be shorter than the chosen time quantum to maximize responsiveness."
-        )
-    elif any(k in p_lower for k in ("pcb", "process control block", "process state")):
-        return (
-            "### Process Control Block (PCB) & State Machine\n\n"
-            "The PCB is the kernel data structure representing an active process:\n"
-            "- **PID**: Unique process identifier.\n"
-            "- **Program Counter (PC)**: Memory address of the next instruction to execute.\n"
-            "- **CPU Registers**: Accumulator, stack pointer, index registers saved on context switch.\n"
-            "- **Memory Management Information**: Base and limit registers, page tables or segment tables.\n"
-            "- **I/O Status**: Open file descriptors and assigned devices.\n\n"
-            "**5 Standard States**: `New` $\\to$ `Ready` $\\to$ `Running` $\\to$ `Waiting` $\\to$ `Terminated`."
-        )
-    elif any(k in p_lower for k in ("wsl", "hybrid", "architecture", "intellios")):
-        return (
-            "### IntelliOS Hybrid Architectural Model\n\n"
-            "IntelliOS adopts an educational hybrid architecture:\n"
-            "1. **Core OS Simulators**: Python-based deterministic algorithms implementing scheduling, contiguous memory partitioning, and Banker's deadlock safety.\n"
-            "2. **Real Linux Execution**: Direct virtualization pass-through to native Ubuntu 24.04 running on WSL2, providing true POSIX system calls and file manipulation.\n"
-            "3. **Host Telemetry**: Real-time Windows hardware monitoring via `psutil`, contrasting simulated abstract states with actual bare-metal thread performance."
-        )
-    elif any(k in p_lower for k in ("fragmentation", "paging", "virtual memory")):
-        return (
-            "### Memory Fragmentation: Internal vs External\n\n"
-            "- **Internal Fragmentation**: Wasted space inside an allocated block (e.g., allocating a 100 KB block to a 80 KB process leaves 20 KB unused inside).\n"
-            "- **External Fragmentation**: Total free memory across disjoint holes is sufficient to satisfy a request, but no single contiguous block is large enough.\n"
-            "- **Solution**: Non-contiguous memory allocation techniques such as Paging (virtual address space divided into fixed pages) and Compaction."
-        )
-    else:
-        return (
-            f"### IntelliOS Academic Assistant\n\n"
-            f"I am ready to help you analyze operating system concepts and lab data! You can ask me about:\n\n"
-            f"- **CPU Scheduling**: FCFS, SJF, SRTF, Priority, Round Robin comparisons.\n"
-            f"- **Memory Management**: First Fit vs Best Fit vs Worst Fit, fragmentation, paging.\n"
-            f"- **Concurrency & Deadlock**: Banker's Algorithm, Coffman conditions, semaphores.\n"
-            f"- **Virtual Filesystem**: Inode structures, directory trees, file permissions (`rwxr-xr-x`).\n"
-            f"- **Live Telemetry**: Real Windows vs Real Ubuntu system performance."
-        )
+# ==============================================================================
+# AI ASSISTANT ENDPOINTS (VIA APP.AI)
+# ==============================================================================
 
 @app.post("/api/ai/chat")
 def ai_chat(req: AIChatReq):

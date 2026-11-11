@@ -21,7 +21,11 @@ import {
   FolderPlus,
   FilePlus,
   Check,
+  Shield,
+  User,
 } from "lucide-react";
+import { useUser } from "../../context/UserContext";
+import { useNotifications } from "../../context/NotificationContext";
 
 const API = "http://localhost:8000/api";
 
@@ -43,6 +47,9 @@ interface BreadcrumbItem {
 }
 
 export const IntelliFiles: React.FC = () => {
+  const { activeUser } = useUser();
+  const { addNotification } = useNotifications();
+
   // Mode: "virtual" or "ubuntu"
   const [mode, setMode] = useState<"virtual" | "ubuntu">("virtual");
 
@@ -192,6 +199,14 @@ export const IntelliFiles: React.FC = () => {
   // Save File Content (Virtual)
   const handleSaveFile = async () => {
     if (!selectedFile || mode !== "virtual") return;
+    if (activeUser.role === "restricted") {
+      addNotification({
+        title: "Permission Denied (403)",
+        message: "Guest role is restricted to read-only browsing. Switch user in Settings to edit.",
+        type: "warning",
+      });
+      return;
+    }
     setSavingFile(true);
     try {
       const res = await fetch(`${API}/fs/write`, {
@@ -202,6 +217,18 @@ export const IntelliFiles: React.FC = () => {
       if (res.ok) {
         setSelectedFile(null);
         fetchVirtualDir(currentFolderId);
+        addNotification({
+          title: "File Saved",
+          message: `Saved changes to ${selectedFile.name}`,
+          type: "success",
+        });
+      } else {
+        const err = await res.json();
+        addNotification({
+          title: "Save Failed",
+          message: err.detail || "Could not save file.",
+          type: "error",
+        });
       }
     } catch {
       // Error
@@ -215,6 +242,15 @@ export const IntelliFiles: React.FC = () => {
     e.preventDefault();
     if (!newModalName.trim()) return;
 
+    if (activeUser.role === "restricted") {
+      addNotification({
+        title: "Permission Denied (403)",
+        message: "Guest role cannot create folders or files. Switch to 'student' or 'root' in Settings.",
+        type: "warning",
+      });
+      return;
+    }
+
     try {
       const res = await fetch(`${API}/fs/create`, {
         method: "POST",
@@ -224,6 +260,7 @@ export const IntelliFiles: React.FC = () => {
           parent_id: currentFolderId,
           is_folder: newModalType === "folder",
           content: newModalType === "file" ? newModalContent : "",
+          owner: activeUser.username,
         }),
       });
 
@@ -232,6 +269,18 @@ export const IntelliFiles: React.FC = () => {
         setNewModalName("");
         setNewModalContent("");
         fetchVirtualDir(currentFolderId);
+        addNotification({
+          title: "Item Created",
+          message: `Created ${newModalType === "folder" ? "folder" : "file"} '${newModalName.trim()}'`,
+          type: "success",
+        });
+      } else {
+        const err = await res.json();
+        addNotification({
+          title: "Creation Refused",
+          message: err.detail || "Could not create item.",
+          type: "error",
+        });
       }
     } catch {
       // Error
@@ -242,6 +291,15 @@ export const IntelliFiles: React.FC = () => {
   const handleRenameSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!renameTarget || !renameName.trim()) return;
+
+    if (activeUser.role === "restricted") {
+      addNotification({
+        title: "Permission Denied (403)",
+        message: "Guest role cannot rename files. Switch user in Settings.",
+        type: "warning",
+      });
+      return;
+    }
 
     try {
       const res = await fetch(`${API}/fs/rename`, {
@@ -254,6 +312,18 @@ export const IntelliFiles: React.FC = () => {
         setRenameTarget(null);
         setRenameName("");
         fetchVirtualDir(currentFolderId);
+        addNotification({
+          title: "Item Renamed",
+          message: `Renamed to '${renameName.trim()}'`,
+          type: "success",
+        });
+      } else {
+        const err = await res.json();
+        addNotification({
+          title: "Rename Refused",
+          message: err.detail || "Could not rename item.",
+          type: "error",
+        });
       }
     } catch {
       // Error
@@ -263,6 +333,16 @@ export const IntelliFiles: React.FC = () => {
   // Delete Node (Virtual)
   const handleDeleteConfirm = async () => {
     if (!deleteConfirm) return;
+
+    if (activeUser.role === "restricted") {
+      addNotification({
+        title: "Permission Denied (403)",
+        message: "Guest role cannot delete files. Switch user in Settings.",
+        type: "warning",
+      });
+      setDeleteConfirm(null);
+      return;
+    }
 
     try {
       const res = await fetch(`${API}/fs/delete`, {
@@ -274,6 +354,18 @@ export const IntelliFiles: React.FC = () => {
       if (res.ok) {
         setDeleteConfirm(null);
         fetchVirtualDir(currentFolderId);
+        addNotification({
+          title: "Item Deleted",
+          message: `Deleted '${deleteConfirm.name}'`,
+          type: "info",
+        });
+      } else {
+        const err = await res.json();
+        addNotification({
+          title: "Delete Refused",
+          message: err.detail || "Could not delete item.",
+          type: "error",
+        });
       }
     } catch {
       // Error
@@ -453,11 +545,41 @@ export const IntelliFiles: React.FC = () => {
 
         {/* Provenance Header Strip */}
         <div className="files-provenance-bar">
-          <span className={`badge ${mode === "virtual" ? "badge-simulated" : "badge-real-ubuntu"}`}>
-            {mode === "virtual"
-              ? "Source: Virtual OS File System (Inodes & Tree)"
-              : "Source: Real Ubuntu via WSL2"}
-          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className={`badge ${mode === "virtual" ? "badge-simulated" : "badge-real-ubuntu"}`}>
+              {mode === "virtual"
+                ? "Source: Virtual OS File System (Inodes & Tree)"
+                : "Source: Real Ubuntu via WSL2"}
+            </span>
+            {mode === "virtual" && (
+              <span
+                className="badge"
+                style={{
+                  background:
+                    activeUser.role === "admin"
+                      ? "rgba(239, 68, 68, 0.15)"
+                      : activeUser.role === "restricted"
+                      ? "rgba(100, 116, 139, 0.2)"
+                      : "rgba(16, 185, 129, 0.15)",
+                  color:
+                    activeUser.role === "admin"
+                      ? "#f87171"
+                      : activeUser.role === "restricted"
+                      ? "#94a3b8"
+                      : "#34d399",
+                  borderColor:
+                    activeUser.role === "admin"
+                      ? "rgba(239, 68, 68, 0.35)"
+                      : activeUser.role === "restricted"
+                      ? "rgba(100, 116, 139, 0.4)"
+                      : "rgba(16, 185, 129, 0.35)",
+                }}
+              >
+                <User size={11} style={{ marginRight: 4 }} />
+                User: {activeUser.username} ({activeUser.role})
+              </span>
+            )}
+          </div>
           <span className="items-count-text">
             {filteredItems.length} {filteredItems.length === 1 ? "item" : "items"}
           </span>

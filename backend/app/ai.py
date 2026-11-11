@@ -158,3 +158,4 @@ def generate_ai_response(prompt: str, context: Optional[Dict[str, Any]] = None) 
             f"- **Virtual Filesystem**: Inode structures, directory trees, file permissions (`rwxr-xr-x`).\n"
             f"- **Live Telemetry**: Real Windows vs Real Ubuntu system performance."
         )
+

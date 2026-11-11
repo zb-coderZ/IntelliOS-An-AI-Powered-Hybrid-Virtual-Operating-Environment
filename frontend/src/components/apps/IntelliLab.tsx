@@ -13,6 +13,7 @@ import {
   AlertTriangle,
   Sparkles,
   HelpCircle,
+  X,
 } from "lucide-react";
 
 const API = "http://localhost:8000/api";
@@ -128,6 +129,102 @@ export const IntelliLab: React.FC = () => {
   const [dlResult, setDlResult] = useState<DeadlockResponse | null>(null);
   const [dlLoading, setDlLoading] = useState(false);
   const [dlError, setDlError] = useState("");
+
+  // AI Explanation State
+  const [aiModalContent, setAiModalContent] = useState<string | null>(null);
+  const [aiModalLoading, setAiModalLoading] = useState(false);
+  const [aiModalTitle, setAiModalTitle] = useState("");
+  const [aiCopied, setAiCopied] = useState(false);
+
+  const handleExplainScheduling = async () => {
+    if (!schedResult) return;
+    setAiModalTitle(`AI Breakdown: ${algo.toUpperCase()} CPU Scheduling`);
+    setAiModalLoading(true);
+    setAiModalContent(null);
+    try {
+      const res = await fetch(`${API}/ai/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: `Explain ${algo.toUpperCase()} scheduling results with avg waiting time ${schedResult.avg_waiting.toFixed(2)} ms`,
+          context: {
+            kind: "scheduling",
+            algo,
+            avg_waiting: schedResult.avg_waiting,
+            avg_turnaround: schedResult.avg_turnaround,
+            cpu_utilization: schedResult.cpu_utilization,
+            context_switches: schedResult.context_switches,
+            quantum: algo === "rr" ? quantum : undefined,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiModalContent(data.explanation || data.reply);
+      }
+    } catch {
+      setAiModalContent("Could not connect to AI backend.");
+    } finally {
+      setAiModalLoading(false);
+    }
+  };
+
+  const handleExplainMemory = async () => {
+    if (!memResult) return;
+    setAiModalTitle("AI Breakdown: Contiguous Memory Allocation");
+    setAiModalLoading(true);
+    setAiModalContent(null);
+    try {
+      const res = await fetch(`${API}/ai/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Explain First Fit vs Best Fit vs Worst Fit memory allocation",
+          context: {
+            kind: "memory",
+            results: memResult.results,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiModalContent(data.explanation || data.reply);
+      }
+    } catch {
+      setAiModalContent("Could not connect to AI backend.");
+    } finally {
+      setAiModalLoading(false);
+    }
+  };
+
+  const handleExplainDeadlock = async () => {
+    if (!dlResult || !dlResult.banker) return;
+    setAiModalTitle("AI Breakdown: Deadlock & Banker's Algorithm");
+    setAiModalLoading(true);
+    setAiModalContent(null);
+    try {
+      const res = await fetch(`${API}/ai/explain`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "Explain Banker's Algorithm safety evaluation",
+          context: {
+            kind: "deadlock",
+            safe: dlResult.banker.safe,
+            safe_sequence: dlResult.banker.safe_sequence || [],
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiModalContent(data.explanation || data.reply);
+      }
+    } catch {
+      setAiModalContent("Could not connect to AI backend.");
+    } finally {
+      setAiModalLoading(false);
+    }
+  };
 
   // =============================================================
   // CPU SCHEDULING LOGIC
@@ -525,8 +622,12 @@ export const IntelliLab: React.FC = () => {
             <div className="lab-panel results-panel">
               <div className="lab-panel-header">
                 <span className="panel-title">Animated Execution Timeline (Gantt Chart)</span>
-                {/* Gantt Playback Controls */}
-                <div className="gantt-playback-controls">
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <button className="explain-ai-btn" onClick={handleExplainScheduling} title="Get comprehensive AI explanation of these scheduling metrics">
+                    <Sparkles size={13} /> Explain with AI
+                  </button>
+                  {/* Gantt Playback Controls */}
+                  <div className="gantt-playback-controls">
                   <button
                     className="playback-btn"
                     title={isPlaying ? "Pause" : "Play step-by-step"}
@@ -559,6 +660,7 @@ export const IntelliLab: React.FC = () => {
                     CPU Time: <b>{playhead}</b>
                   </span>
                 </div>
+              </div>
               </div>
 
               {/* Ready Queue live visualization */}
@@ -727,7 +829,13 @@ export const IntelliLab: React.FC = () => {
 
           {/* Strategy Comparison Results */}
           {memResult && (
-            <div className="memory-comparison-grid">
+            <div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+                <button className="explain-ai-btn" onClick={handleExplainMemory} title="Get AI breakdown of First Fit vs Best Fit vs Worst Fit">
+                  <Sparkles size={13} /> Explain Memory Allocation with AI
+                </button>
+              </div>
+              <div className="memory-comparison-grid">
               {memResult.results.map((res) => {
                 const isBest =
                   res.unallocated.length === 0 &&
@@ -806,6 +914,7 @@ export const IntelliLab: React.FC = () => {
                 );
               })}
             </div>
+            </div>
           )}
         </div>
       )}
@@ -864,6 +973,13 @@ export const IntelliLab: React.FC = () => {
             <div className="lab-panel results-panel">
               <div className="lab-panel-header">
                 <span className="panel-title">System State & Safety Evaluation</span>
+                <button
+                  className="explain-ai-btn"
+                  onClick={handleExplainDeadlock}
+                  title="Get AI evaluation of safe state & Coffman conditions"
+                >
+                  <Sparkles size={13} /> Explain Safety State with AI
+                </button>
               </div>
 
               {dlResult.banker.safe ? (
@@ -934,6 +1050,89 @@ export const IntelliLab: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI Explanation Modal */}
+      {aiModalTitle && (
+        <div className="task-modal-backdrop" onClick={() => setAiModalTitle("")}>
+          <div
+            className="task-modal-box"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: 520 }}
+          >
+            <div className="modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Sparkles size={16} style={{ color: "var(--accent)" }} />
+                <span className="modal-title">{aiModalTitle}</span>
+              </div>
+              <button className="modal-close-btn" onClick={() => setAiModalTitle("")}>
+                <X size={15} />
+              </button>
+            </div>
+
+            <div
+              className="modal-body"
+              style={{
+                maxHeight: 380,
+                overflowY: "auto",
+                fontSize: 12.5,
+                lineHeight: 1.6,
+              }}
+            >
+              {aiModalLoading ? (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "24px 0",
+                    justifyContent: "center",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <RotateCcw size={16} className="spin" />
+                  <span>Analyzing simulation data with IntelliAI Tutor...</span>
+                </div>
+              ) : (
+                <div>
+                  {aiModalContent?.split("\n\n").map((para, pIdx) => (
+                    <p key={pIdx} style={{ margin: "6px 0" }}>
+                      {para.split("\n").map((line, lIdx) => (
+                        <React.Fragment key={lIdx}>
+                          {line.startsWith("### ") ? (
+                            <span className="ai-heading">{line.replace("### ", "")}</span>
+                          ) : line.startsWith("- ") ? (
+                            <span className="ai-bullet">• {line.replace("- ", "")}</span>
+                          ) : (
+                            line
+                          )}
+                          {lIdx < para.split("\n").length - 1 && <br />}
+                        </React.Fragment>
+                      ))}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions">
+              {aiModalContent && !aiModalLoading && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(aiModalContent);
+                    setAiCopied(true);
+                    setTimeout(() => setAiCopied(false), 2000);
+                  }}
+                >
+                  {aiCopied ? "Copied to Clipboard!" : "Copy Explanation"}
+                </button>
+              )}
+              <button className="primary" onClick={() => setAiModalTitle("")}>
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
