@@ -26,6 +26,11 @@ interface Message {
 const SUGGESTIONS = [
   {
     icon: Cpu,
+    label: "Running Processes",
+    prompt: "What processes are currently running?",
+  },
+  {
+    icon: Cpu,
     label: "Round Robin Quantum",
     prompt: "Explain how time quantum size affects Round Robin CPU scheduling and context-switch overhead.",
   },

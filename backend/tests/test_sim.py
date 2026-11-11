@@ -86,4 +86,98 @@ def test_virtual_fs_rbac_permissions():
     with pytest.raises(PermissionError):
         virtual_fs.delete(node["id"], active_role="restricted")
 
+def test_process_snapshot_returns_names():
+    from app.main import process_snapshot
+    procs = process_snapshot(limit=20)
+    assert isinstance(procs, list)
+    assert len(procs) > 0
+    for p in procs:
+        assert p["name"] is not None
+        assert isinstance(p["name"], str)
+        assert len(p["name"].strip()) > 0
+        assert isinstance(p["pid"], int)
+        assert isinstance(p["cpu_percent"], (int, float))
+        assert isinstance(p["memory_percent"], (int, float))
+        assert isinstance(p["status"], str)
+        assert p["source"] == "real-windows"
+
+def test_process_snapshot_sorted_and_limited():
+    from app.main import process_snapshot
+    limit = 3
+    procs = process_snapshot(limit=limit)
+    assert len(procs) <= limit
+    mems = [p["memory_percent"] for p in procs]
+    assert mems == sorted(mems, reverse=True)
+
+def test_process_snapshot_access_denied_handled(monkeypatch):
+    import psutil
+    from app.main import process_snapshot
+
+    class MockProcessDenied:
+        pid = 8888
+        @property
+        def info(self):
+            raise psutil.AccessDenied()
+
+    class MockProcessNoneName:
+        pid = 9999
+        @property
+        def info(self):
+            return {
+                "pid": 9999,
+                "name": None,
+                "status": "running",
+                "cpu_percent": 0.5,
+                "memory_percent": 3.2,
+                "username": None
+            }
+
+    class MockProcessNormal:
+        pid = 7777
+        @property
+        def info(self):
+            return {
+                "pid": 7777,
+                "name": "explorer.exe",
+                "status": "running",
+                "cpu_percent": 1.2,
+                "memory_percent": 5.0,
+                "username": "User"
+            }
+
+    def mock_process_iter(attrs=None):
+        return [MockProcessDenied(), MockProcessNoneName(), MockProcessNormal()]
+
+    monkeypatch.setattr(psutil, "process_iter", mock_process_iter)
+    result = process_snapshot(limit=10)
+
+    assert len(result) == 3
+    for p in result:
+        assert p["name"] is not None
+        assert p["name"] != ""
+    
+    names = [p["name"] for p in result]
+    assert "System process (access denied)" in names
+    assert "explorer.exe" in names
+    # Verify sorting
+    assert result[0]["memory_percent"] >= result[1]["memory_percent"] >= result[2]["memory_percent"]
+
+def test_ai_context_contains_processes():
+    from app.main import build_ai_context
+    from app.ai import generate_ai_response
+
+    ctx = build_ai_context("what processes are currently running?")
+    assert "windows_processes" in ctx
+    assert len(ctx["windows_processes"]) > 0
+
+    first_proc_name = ctx["windows_processes"][0]["name"]
+    assert first_proc_name is not None and len(first_proc_name) > 0
+
+    # Ensure AI formats response using this context
+    ai_reply = generate_ai_response("what processes are currently running?", ctx)
+    assert "Active Running Processes" in ai_reply
+    assert "real-windows" in ai_reply
+    assert str(ctx["windows_processes"][0]["pid"]) in ai_reply
+
+
 

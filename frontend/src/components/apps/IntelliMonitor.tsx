@@ -392,7 +392,7 @@ export const IntelliMonitor: React.FC = () => {
                         return (
                           <tr key={p.pid}>
                             <td className="proc-pid">{p.pid}</td>
-                            <td className="proc-name">{p.name}</td>
+                            <td className="proc-name">{p.name && p.name.trim() !== "" ? p.name : "System process (access denied)"}</td>
                             <td>
                               <div className="proc-mem-bar-wrapper">
                                 <div className="proc-mem-bar">

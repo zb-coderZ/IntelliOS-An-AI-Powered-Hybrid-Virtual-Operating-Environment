@@ -179,7 +179,8 @@ export const IntelliTask: React.FC = () => {
 
   const filteredRealProcs = realProcs.filter((p) => {
     const q = searchQuery.toLowerCase();
-    return p.name.toLowerCase().includes(q) || String(p.pid).includes(q);
+    const procName = p.name && p.name.trim() !== "" ? p.name : "System process (access denied)";
+    return procName.toLowerCase().includes(q) || String(p.pid).includes(q);
   });
 
   return (
@@ -262,7 +263,7 @@ export const IntelliTask: React.FC = () => {
                       <td className="mono-cell">{p.pid}</td>
                       <td>
                         <div className="proc-name-cell">
-                          <span className="p-name">{p.name}</span>
+                          <span className="p-name">{p.name && p.name.trim() !== "" ? p.name : "System process (access denied)"}</span>
                           {p.is_critical && (
                             <span className="critical-badge" title="Critical System Process Protected">
                               <Shield size={10} /> Protected
@@ -430,7 +431,7 @@ export const IntelliTask: React.FC = () => {
 
             <div className="modal-body">
               <p>
-                Are you sure you want to end task for <b>{killModalTarget.name}</b> (PID:{" "}
+                Are you sure you want to end task for <b>{killModalTarget.name || "System process (access denied)"}</b> (PID:{" "}
                 <code>{killModalTarget.pid}</code>)?
               </p>
               <div className="modal-warning-strip">

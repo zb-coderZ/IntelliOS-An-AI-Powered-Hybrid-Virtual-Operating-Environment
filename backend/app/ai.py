@@ -31,13 +31,84 @@ def load_dotenv(dotenv_path: Optional[str] = None):
 
 load_dotenv()
 
+SYSTEM_PROMPT = (
+    "You receive structured system data as JSON. When asked about running processes, "
+    "list them with name, PID, CPU and memory from the data. Use only the provided data. "
+    "If a process name is protected, say it is a protected system process. "
+    "Never invent processes or numbers. If the data is missing, say so."
+)
+
 def generate_ai_response(prompt: str, context: Optional[Dict[str, Any]] = None) -> str:
     """
     IntelliOS AI Assistant & Viva Tutor.
     Provides context-aware analysis of simulation results,
-    memory allocations, deadlock safety sequences, and OS theory.
+    memory allocations, deadlock safety sequences, live process telemetry, and OS theory.
     """
     p_lower = prompt.lower()
+
+    # Check if query requests active running processes or system telemetry
+    is_process_query = (
+        any(k in p_lower for k in (
+            "what processes", "which processes", "running processes", "list process", "active process",
+            "show process", "current processes", "processes are currently running", "processes running",
+            "running tasks", "active tasks", "what is running"
+        ))
+        or (context and context.get("kind") == "processes")
+    )
+
+    if is_process_query or (context and ("windows_processes" in context or "ubuntu_processes" in context)):
+        win_procs = (context.get("windows_processes") if context else None) or (context.get("processes") if context else None) or []
+        ub_procs = (context.get("ubuntu_processes") if context else None) or []
+        ub_status = context.get("ubuntu") if context else None
+
+        if not win_procs and not ub_procs:
+            if ub_status == "disconnected":
+                return (
+                    "### Running Processes Report\n\n"
+                    "The process telemetry data is currently missing or unavailable.\n\n"
+                    "- **Windows**: No active process telemetry received.\n"
+                    "- **Ubuntu**: Disconnected."
+                )
+            return "The process telemetry data is currently missing or unavailable."
+
+        sections = []
+        sections.append("### Active Running Processes (Live System Telemetry)\n")
+
+        if win_procs:
+            sections.append("#### Windows Host Processes (`source: real-windows`)")
+            sections.append("| PID | Process Name | CPU % | RAM % | Status |")
+            sections.append("| :--- | :--- | :--- | :--- | :--- |")
+            for proc in win_procs:
+                raw_name = proc.get("name") or "System process (access denied)"
+                if raw_name == "System process (access denied)" or proc.get("is_critical"):
+                    display_name = f"`{raw_name}` *(protected system process)*"
+                else:
+                    display_name = f"**{raw_name}**"
+                pid = proc.get("pid", "N/A")
+                cpu = proc.get("cpu_percent", 0.0)
+                mem = proc.get("memory_percent", 0.0)
+                status = proc.get("status", "running")
+                sections.append(f"| `{pid}` | {display_name} | `{cpu}%` | `{mem}%` | `{status}` |")
+
+        if ub_procs:
+            sections.append("\n#### Ubuntu Environment Processes (`source: real-ubuntu`)")
+            sections.append("| PID | Process Name | CPU % | RAM % | Status |")
+            sections.append("| :--- | :--- | :--- | :--- | :--- |")
+            for proc in ub_procs:
+                raw_name = proc.get("name") or "System process (access denied)"
+                if raw_name == "System process (access denied)":
+                    display_name = f"`{raw_name}` *(protected system process)*"
+                else:
+                    display_name = f"**{raw_name}**"
+                pid = proc.get("pid", "N/A")
+                cpu = proc.get("cpu_percent", 0.0)
+                mem = proc.get("memory_percent", 0.0)
+                status = proc.get("status", "running")
+                sections.append(f"| `{pid}` | {display_name} | `{cpu}%` | `{mem}%` | `{status}` |")
+        elif ub_status == "disconnected":
+            sections.append("\n#### Ubuntu Environment (`source: real-ubuntu`)\n- **Status**: Disconnected (WSL2 Ubuntu 24.04 offline).")
+
+        return "\n".join(sections)
 
     if context:
         kind = context.get("kind")

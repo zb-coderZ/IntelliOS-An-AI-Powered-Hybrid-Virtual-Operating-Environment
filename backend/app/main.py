@@ -10,6 +10,9 @@ from .simulators.process_manager import virtual_pm
 from .simulators.virtual_fs import virtual_fs
 from .ai import generate_ai_response
 
+# Prime psutil CPU counters once at startup so per-process CPU values are accurate after the first refresh
+psutil.cpu_percent(interval=None)
+
 app = FastAPI(title="IntelliOS")
 app.add_middleware(
     CORSMiddleware,
@@ -101,23 +104,151 @@ def api_deadlock(r: DLReq):
         out["detection"] = detect(r.available, r.allocation, r.request)
     return out
 
+# =========================================================================
+# CRITICAL PROCESSES & TELEMETRY SNAPSHOT HELPERS
+# =========================================================================
+CRITICAL_PROCS = {
+    "system", "system idle process", "csrss.exe", "lsass.exe", "smss.exe",
+    "services.exe", "wininit.exe", "explorer.exe", "svchost.exe", "dwm.exe",
+    "ntoskrnl.exe", "registry", "fontdrvhost.exe"
+}
+
+def process_snapshot(limit: int = 20) -> List[dict]:
+    """
+    Returns top processes sorted descending by memory_percent.
+    Guarantees every row contains: pid, name, status, cpu_percent, memory_percent, source.
+    Handles NoSuchProcess and AccessDenied gracefully with protected fallback.
+    """
+    results = []
+    for p in psutil.process_iter(["pid", "name", "status", "cpu_percent", "memory_percent", "username"]):
+        try:
+            info = p.info
+            raw_name = info.get("name")
+            name = str(raw_name).strip() if (raw_name and str(raw_name).strip()) else "System process (access denied)"
+            pid = info.get("pid", 0)
+            status = info.get("status") or "running"
+            cpu_val = round(float(info.get("cpu_percent") or 0.0), 1)
+            mem_val = round(float(info.get("memory_percent") or 0.0), 1)
+            is_crit = (name.lower() in CRITICAL_PROCS) if name else False
+            results.append({
+                "pid": pid,
+                "name": name,
+                "status": status,
+                "cpu_percent": cpu_val,
+                "memory_percent": mem_val,
+                "source": "real-windows",
+                "username": info.get("username") or "SYSTEM",
+                "is_critical": is_crit,
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            try:
+                pid = getattr(p, "pid", 0)
+                results.append({
+                    "pid": pid,
+                    "name": "System process (access denied)",
+                    "status": "running",
+                    "cpu_percent": 0.0,
+                    "memory_percent": 0.0,
+                    "source": "real-windows",
+                    "username": "SYSTEM",
+                    "is_critical": True,
+                })
+            except Exception:
+                continue
+        except Exception:
+            continue
+
+    results.sort(key=lambda x: x["memory_percent"], reverse=True)
+    return results[:limit]
+
+def ubuntu_process_snapshot(limit: int = 20) -> dict:
+    """
+    Parses running Ubuntu processes using ps -eo pid,comm,%cpu,%mem --sort=-%mem via WSL2.
+    Returns standard format with source = 'real-ubuntu'. If disconnected, reports disconnected.
+    """
+    try:
+        p = subprocess.run(
+            ["wsl", "-d", "Ubuntu-24.04", "--", "ps", "-eo", "pid,comm,%cpu,%mem", "--sort=-%mem"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if p.returncode != 0:
+            return {"source": "real-ubuntu", "status": "disconnected", "processes": []}
+
+        lines = [line.strip() for line in p.stdout.strip().split("\n") if line.strip()]
+        procs = []
+        for line in lines[1:]:
+            parts = line.split(None, 3)
+            if len(parts) >= 4:
+                try:
+                    pid = int(parts[0])
+                    comm = parts[1].strip() or "System process (access denied)"
+                    cpu = round(float(parts[2]), 1)
+                    mem = round(float(parts[3]), 1)
+                    procs.append({
+                        "pid": pid,
+                        "name": comm,
+                        "status": "running",
+                        "cpu_percent": cpu,
+                        "memory_percent": mem,
+                        "source": "real-ubuntu",
+                    })
+                except (ValueError, IndexError):
+                    continue
+        return {
+            "source": "real-ubuntu",
+            "status": "connected",
+            "processes": procs[:limit],
+        }
+    except Exception:
+        return {"source": "real-ubuntu", "status": "disconnected", "processes": []}
+
+def build_ai_context(message: str, client_context: Optional[dict] = None) -> dict:
+    """
+    Enriches AI context with live process telemetry whenever system state is queried.
+    Reports real-windows and real-ubuntu separately without mixing real and simulated data.
+    """
+    ctx = dict(client_context) if client_context else {}
+    msg_lower = (message or "").lower()
+
+    process_keywords = (
+        "process", "running", "task", "pid", "cpu", "memory", "monitor",
+        "system", "psutil", "top", "kill", "daemon", "service", "ram", "hardware"
+    )
+    needs_system_state = (
+        any(k in msg_lower for k in process_keywords)
+        or ctx.get("kind") in ("processes", "monitor", "system", "task")
+        or "processes" in ctx
+    )
+
+    if needs_system_state:
+        ctx["windows_processes"] = process_snapshot(limit=20)
+        ctx["windows_system"] = {
+            "source": "real-windows",
+            "cpu_percent": psutil.cpu_percent(interval=None),
+            "ram_percent": psutil.virtual_memory().percent,
+            "cores": psutil.cpu_count(),
+        }
+
+        ub_res = ubuntu_process_snapshot(limit=20)
+        if ub_res.get("status") == "connected" and ub_res.get("processes"):
+            ctx["ubuntu_processes"] = ub_res["processes"]
+        else:
+            ctx["ubuntu"] = "disconnected"
+
+    return ctx
+
 @app.get("/api/monitor/windows")
 def win_monitor():
     vm, du = psutil.virtual_memory(), psutil.disk_usage("/")
     return {
         "source": "real-windows",
-        "cpu_percent": psutil.cpu_percent(interval=0.2),
+        "cpu_percent": psutil.cpu_percent(interval=None),
         "cores": psutil.cpu_count(),
         "ram_percent": vm.percent,
         "disk_percent": du.percent,
-        "processes": [
-            p.info
-            for p in sorted(
-                psutil.process_iter(["pid", "name", "memory_percent"]),
-                key=lambda p: p.info["memory_percent"] or 0,
-                reverse=True,
-            )[:15]
-        ],
+        "processes": process_snapshot(limit=15),
     }
 
 @app.get("/api/monitor/ubuntu")
@@ -146,6 +277,7 @@ def ubuntu_monitor():
                 disk_percent = float(parts[4].replace("%", ""))
 
         uptime_str = p_up.stdout.strip()
+        ub_procs = ubuntu_process_snapshot(limit=15)
 
         return {
             "source": "real-ubuntu",
@@ -155,6 +287,7 @@ def ubuntu_monitor():
             "ram_percent": ram_percent,
             "disk_percent": disk_percent,
             "uptime": uptime_str,
+            "processes": ub_procs.get("processes", []),
         }
     except Exception:
         return {
@@ -166,33 +299,10 @@ def ubuntu_monitor():
 # =========================================================================
 # PROCESS MANAGEMENT ENDPOINTS (REAL WINDOWS & VIRTUAL OS)
 # =========================================================================
-CRITICAL_PROCS = {
-    "system", "system idle process", "csrss.exe", "lsass.exe", "smss.exe",
-    "services.exe", "wininit.exe", "explorer.exe", "svchost.exe", "dwm.exe",
-    "ntoskrnl.exe", "registry", "fontdrvhost.exe"
-}
 
 @app.get("/api/processes/real")
 def get_real_processes():
-    procs = []
-    for p in psutil.process_iter(["pid", "name", "memory_percent", "cpu_percent", "status", "username"]):
-        try:
-            info = p.info
-            procs.append({
-                "pid": info["pid"],
-                "name": info["name"] or "Unknown",
-                "memory_percent": round(info["memory_percent"] or 0, 1),
-                "cpu_percent": round(info["cpu_percent"] or 0, 1),
-                "status": info["status"] or "running",
-                "username": info.get("username") or "SYSTEM",
-                "is_critical": (info["name"].lower() in CRITICAL_PROCS) if info["name"] else False,
-            })
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            continue
-
-    # Return top 50 sorted by memory percent
-    procs.sort(key=lambda x: x["memory_percent"], reverse=True)
-    return {"source": "real-windows", "processes": procs[:50]}
+    return {"source": "real-windows", "processes": process_snapshot(limit=50)}
 
 @app.post("/api/processes/real/kill")
 def kill_real_process(req: RealKillReq):
@@ -387,20 +497,6 @@ async def ws_monitor(websocket: WebSocket):
             cpu_pct = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory()
             disk = psutil.disk_usage("/")
-            procs = []
-            for p in psutil.process_iter(["pid", "name", "memory_percent", "cpu_percent"]):
-                try:
-                    info = p.info
-                    if info["memory_percent"] and info["memory_percent"] > 0.05:
-                        procs.append({
-                            "pid": info["pid"],
-                            "name": info["name"],
-                            "memory_percent": info["memory_percent"],
-                            "cpu_percent": info.get("cpu_percent", 0.0),
-                        })
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
-            procs.sort(key=lambda x: x["memory_percent"], reverse=True)
             payload = {
                 "source": "real-windows",
                 "cpu_percent": cpu_pct,
@@ -410,7 +506,7 @@ async def ws_monitor(websocket: WebSocket):
                 "ram_total_gb": round(ram.total / (1024**3), 2),
                 "disk_percent": disk.percent,
                 "disk_free_gb": round(disk.free / (1024**3), 2),
-                "processes": procs[:15],
+                "processes": process_snapshot(limit=15),
             }
             await websocket.send_json(payload)
             await asyncio.sleep(1.0)
@@ -423,12 +519,14 @@ async def ws_monitor(websocket: WebSocket):
 
 @app.post("/api/ai/chat")
 def ai_chat(req: AIChatReq):
-    reply = generate_ai_response(req.message, req.context)
+    enriched_ctx = build_ai_context(req.message, req.context)
+    reply = generate_ai_response(req.message, enriched_ctx)
     return {"source": "ai-tutor", "reply": reply}
 
 @app.post("/api/ai/explain")
 def ai_explain(req: AIChatReq):
-    reply = generate_ai_response(req.message, req.context)
+    enriched_ctx = build_ai_context(req.message, req.context)
+    reply = generate_ai_response(req.message, enriched_ctx)
     return {"source": "ai-tutor", "explanation": reply}
 
 
