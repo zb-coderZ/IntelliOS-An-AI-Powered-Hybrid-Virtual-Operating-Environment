@@ -1,0 +1,233 @@
+/* ==========================================================================
+   IntelliOS Theme Design Tokens & Typography
+   Inspired by Ubuntu GNOME, Kali Linux, and modern Glassmorphic Desktop UIs
+   ========================================================================== */
+
+:root,
+[data-theme="ubuntu-dark"] {
+  /* Colors */
+  --bg-desktop: #1a0f24;
+  --bg-panel: rgba(22, 14, 28, 0.82);
+  --bg-panel-solid: #160e1c;
+  --bg-panel-border: rgba(255, 255, 255, 0.09);
+  --bg-dock: rgba(18, 11, 23, 0.84);
+  --bg-dock-border: rgba(255, 255, 255, 0.08);
+
+  --bg-window: rgba(28, 18, 36, 0.85);
+  --bg-window-inactive: rgba(22, 14, 28, 0.75);
+  --bg-window-header: rgba(38, 24, 48, 0.92);
+  --bg-window-header-inactive: rgba(28, 18, 36, 0.82);
+
+  --bg-surface: rgba(255, 255, 255, 0.05);
+  --bg-surface-hover: rgba(255, 255, 255, 0.09);
+  --bg-surface-active: rgba(255, 255, 255, 0.14);
+
+  --border-subtle: rgba(255, 255, 255, 0.09);
+  --border-window: rgba(255, 255, 255, 0.13);
+  --border-window-active: rgba(233, 84, 32, 0.65);
+  --border-window-inactive: rgba(255, 255, 255, 0.06);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-on-accent: #ffffff;
+
+  --accent: #e95420; /* Ubuntu Aubergine Orange */
+  --accent-rgb: 233, 84, 32;
+  --accent-hover: #ff6a38;
+  --accent-active: #c74313;
+  --accent-subtle: rgba(233, 84, 32, 0.18);
+  --accent-glow: rgba(233, 84, 32, 0.35);
+
+  --shadow-window: 0 16px 40px -8px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  --shadow-window-active: 0 24px 60px -12px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(233, 84, 32, 0.45), 0 0 25px rgba(233, 84, 32, 0.2);
+  --shadow-dock: 4px 0 25px rgba(0, 0, 0, 0.4);
+  --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.35);
+  --shadow-tooltip: 0 8px 20px rgba(0, 0, 0, 0.4);
+
+  /* Terminal Colors */
+  --term-bg: rgba(14, 9, 18, 0.94);
+  --term-prompt-user: #e95420;
+  --term-prompt-host: #38bdf8;
+  --term-prompt-path: #a855f7;
+  --term-text: #e2e8f0;
+
+  --badge-simulated-bg: rgba(249, 115, 22, 0.15);
+  --badge-simulated-text: #fb923c;
+  --badge-simulated-border: rgba(249, 115, 22, 0.35);
+
+  --badge-real-windows-bg: rgba(6, 182, 212, 0.15);
+  --badge-real-windows-text: #22d3ee;
+  --badge-real-windows-border: rgba(6, 182, 212, 0.35);
+
+  --badge-real-ubuntu-bg: rgba(16, 185, 129, 0.15);
+  --badge-real-ubuntu-text: #34d399;
+  --badge-real-ubuntu-border: rgba(16, 185, 129, 0.35);
+}
+
+[data-theme="ubuntu-light"] {
+  --bg-desktop: #ebdcd5;
+  --bg-panel: rgba(255, 255, 255, 0.88);
+  --bg-panel-solid: #ffffff;
+  --bg-panel-border: rgba(0, 0, 0, 0.08);
+  --bg-dock: rgba(247, 245, 249, 0.9);
+  --bg-dock-border: rgba(0, 0, 0, 0.08);
+
+  --bg-window: rgba(255, 255, 255, 0.92);
+  --bg-window-inactive: rgba(245, 245, 247, 0.88);
+  --bg-window-header: rgba(244, 242, 246, 0.97);
+  --bg-window-header-inactive: rgba(238, 236, 240, 0.92);
+
+  --bg-surface: rgba(0, 0, 0, 0.04);
+  --bg-surface-hover: rgba(0, 0, 0, 0.08);
+  --bg-surface-active: rgba(0, 0, 0, 0.12);
+
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --border-window: rgba(0, 0, 0, 0.12);
+  --border-window-active: rgba(233, 84, 32, 0.7);
+  --border-window-inactive: rgba(0, 0, 0, 0.06);
+
+  --text-primary: #1e1e24;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-on-accent: #ffffff;
+
+  --accent: #e95420;
+  --accent-rgb: 233, 84, 32;
+  --accent-hover: #d34211;
+  --accent-active: #b53409;
+  --accent-subtle: rgba(233, 84, 32, 0.14);
+  --accent-glow: rgba(233, 84, 32, 0.25);
+
+  --shadow-window: 0 16px 36px -8px rgba(0, 0, 0, 0.16), 0 0 0 1px rgba(0, 0, 0, 0.08);
+  --shadow-window-active: 0 24px 50px -10px rgba(0, 0, 0, 0.22), 0 0 0 1px rgba(233, 84, 32, 0.5), 0 0 20px rgba(233, 84, 32, 0.18);
+  --shadow-dock: 4px 0 20px rgba(0, 0, 0, 0.08);
+  --shadow-panel: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-tooltip: 0 8px 18px rgba(0, 0, 0, 0.15);
+
+  --term-bg: rgba(26, 20, 32, 0.95);
+  --term-prompt-user: #e95420;
+  --term-prompt-host: #0284c7;
+  --term-prompt-path: #9333ea;
+  --term-text: #f1f5f9;
+
+  --badge-simulated-bg: rgba(234, 88, 12, 0.12);
+  --badge-simulated-text: #c2410c;
+  --badge-simulated-border: rgba(234, 88, 12, 0.3);
+
+  --badge-real-windows-bg: rgba(2, 132, 199, 0.12);
+  --badge-real-windows-text: #0369a1;
+  --badge-real-windows-border: rgba(2, 132, 199, 0.3);
+
+  --badge-real-ubuntu-bg: rgba(5, 150, 105, 0.12);
+  --badge-real-ubuntu-text: #047857;
+  --badge-real-ubuntu-border: rgba(5, 150, 105, 0.3);
+}
+
+[data-theme="kali-dark"] {
+  --bg-desktop: #0a0e14;
+  --bg-panel: rgba(13, 17, 23, 0.85);
+  --bg-panel-solid: #0d1117;
+  --bg-panel-border: rgba(0, 240, 255, 0.16);
+  --bg-dock: rgba(10, 14, 20, 0.88);
+  --bg-dock-border: rgba(0, 240, 255, 0.16);
+
+  --bg-window: rgba(14, 19, 28, 0.88);
+  --bg-window-inactive: rgba(10, 14, 22, 0.78);
+  --bg-window-header: rgba(20, 28, 40, 0.96);
+  --bg-window-header-inactive: rgba(14, 20, 30, 0.88);
+
+  --bg-surface: rgba(0, 240, 255, 0.04);
+  --bg-surface-hover: rgba(0, 240, 255, 0.08);
+  --bg-surface-active: rgba(0, 240, 255, 0.14);
+
+  --border-subtle: rgba(0, 240, 255, 0.12);
+  --border-window: rgba(0, 240, 255, 0.18);
+  --border-window-active: rgba(0, 240, 255, 0.75);
+  --border-window-inactive: rgba(255, 255, 255, 0.06);
+
+  --text-primary: #f0f6fc;
+  --text-secondary: #8b949e;
+  --text-muted: #57606a;
+  --text-on-accent: #000000;
+
+  --accent: #00f0ff; /* Kali Electric Cyan */
+  --accent-rgb: 0, 240, 255;
+  --accent-hover: #38f4ff;
+  --accent-active: #00b9c4;
+  --accent-subtle: rgba(0, 240, 255, 0.15);
+  --accent-glow: rgba(0, 240, 255, 0.38);
+
+  --shadow-window: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(0, 240, 255, 0.16);
+  --shadow-window-active: 0 24px 60px -12px rgba(0, 0, 0, 0.88), 0 0 0 1px rgba(0, 240, 255, 0.7), 0 0 28px rgba(0, 240, 255, 0.28);
+  --shadow-dock: 4px 0 25px rgba(0, 0, 0, 0.55);
+  --shadow-panel: 0 4px 20px rgba(0, 0, 0, 0.45);
+  --shadow-tooltip: 0 8px 20px rgba(0, 0, 0, 0.5);
+
+  --term-bg: rgba(8, 12, 18, 0.96);
+  --term-prompt-user: #00f0ff;
+  --term-prompt-host: #3b82f6;
+  --term-prompt-path: #ec4899;
+  --term-text: #e6edf3;
+
+  --badge-simulated-bg: rgba(249, 115, 22, 0.15);
+  --badge-simulated-text: #fb923c;
+  --badge-simulated-border: rgba(249, 115, 22, 0.35);
+
+  --badge-real-windows-bg: rgba(0, 240, 255, 0.15);
+  --badge-real-windows-text: #00f0ff;
+  --badge-real-windows-border: rgba(0, 240, 255, 0.35);
+
+  --badge-real-ubuntu-bg: rgba(16, 185, 129, 0.15);
+  --badge-real-ubuntu-text: #34d399;
+  --badge-real-ubuntu-border: rgba(16, 185, 129, 0.35);
+}
+
+/* Common Layout, Typography & Glassmorphism Properties */
+:root {
+  --font-sans: "Ubuntu", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Ubuntu Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --glass-blur: blur(20px) saturate(180%);
+  --glass-blur-sm: blur(10px) saturate(160%);
+
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+
+  /* Transitions */
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --transition-quick: 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-normal: 240ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 360ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Elevation z-indices */
+  --z-wallpaper: 0;
+  --z-desktop-icons: 10;
+  --z-windows-base: 50;
+  --z-dock: 500;
+  --z-top-panel: 600;
+  --z-overlay: 700;
+  --z-context-menu: 800;
+  --z-modal: 900;
+  --z-notifications: 1000;
+  --z-tooltip: 1100;
+}
+
+/* Reduced Motion Override */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-reduced-motion="true"] {
+    --transition-quick: 1ms !important;
+    --transition-normal: 1ms !important;
+    --transition-slow: 1ms !important;
+    --ease-spring: linear !important;
+    --ease-smooth: linear !important;
+  }
+}
+
