@@ -55,20 +55,35 @@ def test_virtual_fs_operations():
 
     # Create folder and file
     new_dir = virtual_fs.create("Projects", parent_id="home", is_folder=True)
-    assert new_dir.is_folder is True
-    file_node = virtual_fs.create("main.py", parent_id=new_dir.id, is_folder=False, content="print('hello')")
-    assert file_node.size == len("print('hello')".encode("utf-8"))
+    assert new_dir["is_folder"] is True
+    file_node = virtual_fs.create("main.py", parent_id=new_dir["id"], is_folder=False, content="print('hello')")
+    assert file_node["size"] == len("print('hello')".encode("utf-8"))
 
     # Read file
-    content_res = virtual_fs.read_file(file_node.id)
+    content_res = virtual_fs.read_file(file_node["id"])
     assert content_res["content"] == "print('hello')"
 
     # Rename file
-    renamed = virtual_fs.rename(file_node.id, "app.py")
-    assert renamed.name == "app.py"
+    renamed = virtual_fs.rename(file_node["id"], "app.py")
+    assert renamed["name"] == "app.py"
 
     # Delete folder
-    deleted = virtual_fs.delete(new_dir.id)
+    deleted = virtual_fs.delete(new_dir["id"])
     assert deleted is True
-    assert virtual_fs.get_node(file_node.id) is None
+    assert virtual_fs.get_node(file_node["id"]) is None
+
+def test_virtual_fs_rbac_permissions():
+    import pytest
+    virtual_fs.reset()
+    # Student creates a file
+    node = virtual_fs.create("student_note.txt", parent_id="home", is_folder=False, content="my note", active_role="standard")
+    assert node["name"] == "student_note.txt"
+
+    # Guest attempt to write or create should fail with PermissionError (403)
+    with pytest.raises(PermissionError):
+        virtual_fs.create("guest_hack.sh", parent_id="home", is_folder=False, active_role="restricted")
+
+    with pytest.raises(PermissionError):
+        virtual_fs.delete(node["id"], active_role="restricted")
+
 

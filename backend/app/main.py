@@ -1,6 +1,6 @@
-import shlex, subprocess, psutil, re
+import shlex, subprocess, psutil, re, asyncio
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from .simulators.scheduling import schedule
@@ -8,6 +8,7 @@ from .simulators.memory import compare
 from .simulators.deadlock import banker, detect
 from .simulators.process_manager import virtual_pm
 from .simulators.virtual_fs import virtual_fs
+from .ai import generate_ai_response
 
 app = FastAPI(title="IntelliOS")
 app.add_middleware(
@@ -75,6 +76,9 @@ class UbuntuFilesReq(BaseModel):
 class AIChatReq(BaseModel):
     message: str
     context: Optional[dict] = None
+
+class SwitchUserReq(BaseModel):
+    username: str
 
 @app.post("/api/schedule")
 def api_schedule(r: SchedReq):
