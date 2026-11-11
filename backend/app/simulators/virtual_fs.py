@@ -189,3 +189,4 @@ class VirtualFileSystem:
 
 # Global singleton
 virtual_fs = VirtualFileSystem()
+

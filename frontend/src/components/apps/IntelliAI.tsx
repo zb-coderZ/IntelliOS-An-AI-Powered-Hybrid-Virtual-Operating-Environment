@@ -265,3 +265,4 @@ export const IntelliAI: React.FC = () => {
     </div>
   );
 };
+

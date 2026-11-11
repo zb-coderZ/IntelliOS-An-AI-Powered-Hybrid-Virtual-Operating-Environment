@@ -6,3 +6,4 @@ export interface NotificationItem {
   timestamp: string;
   autoDismissMs?: number;
 }
+

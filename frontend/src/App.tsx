@@ -264,17 +264,7 @@ const renderAppBody = (id: AppId) => {
     case "IntelliSettings":
       return <IntelliSettings />;
     default:
-      return (
-        <div style={{ padding: 16, color: "var(--text-secondary)" }}>
-          <h4 style={{ color: "var(--text-primary)", marginBottom: 6 }}>
-            {APPS_CONFIG[id]?.name || id}
-          </h4>
-          <p>{APPS_CONFIG[id]?.description}</p>
-          <p style={{ marginTop: 12, fontSize: 12, color: "var(--text-muted)" }}>
-            Coming in a later phase.
-          </p>
-        </div>
-      );
+      return null;
   }
 };
 

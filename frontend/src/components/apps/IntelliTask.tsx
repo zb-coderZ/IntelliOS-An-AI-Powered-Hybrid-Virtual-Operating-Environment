@@ -520,3 +520,4 @@ export const IntelliTask: React.FC = () => {
     </div>
   );
 };
+
